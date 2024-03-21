@@ -5,6 +5,10 @@ import AVFoundation
 struct AudioNewApp: App {
     @StateObject private var audioRecorder = AudioRecorder()
     
+    init() {
+        audioRecorder.startListeningForCommands()
+    }
+    
     var body: some Scene {
         WindowGroup {
             ContentView().environmentObject(audioRecorder)
@@ -12,7 +16,7 @@ struct AudioNewApp: App {
     }
 }
 
-class AudioRecorder: NSObject, ObservableObject {
+class AudioRecorder: NSObject, ObservableObject, URLSessionDelegate {
     var audioRecorder: AVAudioRecorder?
     var audioPlayer: AVAudioPlayer?
     
@@ -25,7 +29,6 @@ class AudioRecorder: NSObject, ObservableObject {
         super.init()
         print("AudioRecorder initialized")
         setupRecorder()
-        startListeningForCommands()
     }
     
     func startListeningForCommands() {
@@ -43,6 +46,48 @@ class AudioRecorder: NSObject, ObservableObject {
             } else {
                 print("WebSocket ping successful")
             }
+        }
+        
+        receiveMessage()
+    }
+    
+    func receiveMessage() {
+        webSocket?.receive { [weak self] result in
+            switch result {
+            case .success(let message):
+                self?.handleMessage(message)
+            case .failure(let error):
+                print("Failed to receive message: \(error)")
+            }
+            
+            // Continue receiving messages
+            self?.receiveMessage()
+        }
+    }
+    
+    
+    func handleMessage(_ message: URLSessionWebSocketTask.Message) {
+        print("Received message from WebSocket (new)")
+        switch message {
+        case .string(let text):
+            print("Received text message: \(text)")
+            if text == "startRecording" {
+                print("Received startRecording command")
+                DispatchQueue.main.async {
+                    self.startRecording()
+                }
+            } else if text == "stopRecording" {
+                print("Received stopRecording command")
+                DispatchQueue.main.async {
+                    self.stopRecording()
+                }
+            } else {
+                print("Unknown command received: \(text)")
+            }
+        case .data(let data):
+            print("Received binary message: \(data)")
+        @unknown default:
+            break
         }
     }
     
@@ -158,45 +203,4 @@ class AudioRecorder: NSObject, ObservableObject {
     }
 }
 
-extension AudioRecorder: URLSessionWebSocketDelegate {
-    func urlSession(_ session: URLSession, webSocketTask: URLSessionWebSocketTask, didOpenWithProtocol protocolName: String?) {
-        print("WebSocket connected with protocol: \(protocolName ?? "none")")
-    }
-    
-    func urlSession(_ session: URLSession, webSocketTask: URLSessionWebSocketTask, didCloseWith closeCode: URLSessionWebSocketTask.CloseCode, reason: Data?) {
-        print("WebSocket disconnected with code: \(closeCode.rawValue), reason: \(String(data: reason ?? Data(), encoding: .utf8) ?? "none")")
-    }
-    
-    func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
-        if let error = error {
-            print("WebSocket task completed with error: \(error)")
-        } else {
-            print("WebSocket task completed successfully")
-        }
-    }
-    
-    func urlSession(_ session: URLSession, webSocketTask: URLSessionWebSocketTask, didReceiveMessage message: URLSessionWebSocketTask.Message) {
-        print("Received message from WebSocket")
-        switch message {
-        case .string(let text):
-            print("Received text message: \(text)")
-            if text == "startRecording" {
-                print("Received startRecording command")
-                DispatchQueue.main.async {
-                    self.startRecording()
-                }
-            } else if text == "stopRecording" {
-                print("Received stopRecording command")
-                DispatchQueue.main.async {
-                    self.stopRecording()
-                }
-            } else {
-                print("Unknown command received: \(text)")
-            }
-        case .data(let data):
-            print("Received binary message: \(data)")
-        @unknown default:
-            break
-        }
-    }
-}
+
