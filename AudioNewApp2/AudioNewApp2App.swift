@@ -151,7 +151,7 @@ class AudioRecorder: NSObject, ObservableObject, URLSessionDelegate {
         let audioFilename = audioRecorder.url
         
         // Create a URLRequest to upload the audio file to the server
-        var request = URLRequest(url: URL(string: "http://localhost:3002/uploadAudio")!)
+        var request = URLRequest(url: URL(string: "http://localhost:3002/audiodata")!)
         request.httpMethod = "POST"
         
         // Set up the request body with the audio file data
@@ -163,22 +163,28 @@ class AudioRecorder: NSObject, ObservableObject, URLSessionDelegate {
         body.append("--\(boundary)\r\n".data(using: .utf8)!)
         body.append("Content-Disposition: form-data; name=\"audio\"; filename=\"recording.m4a\"\r\n".data(using: .utf8)!)
         body.append("Content-Type: audio/m4a\r\n\r\n".data(using: .utf8)!)
-        body.append(try! Data(contentsOf: audioFilename))
-        body.append("\r\n--\(boundary)--\r\n".data(using: .utf8)!)
         
-        request.httpBody = body
-        
-        // Send the request to upload the audio file
-        let task = URLSession.shared.dataTask(with: request) { (data, response, error) in
-            if let error = error {
-                print("Error uploading audio file: \(error)")
-                return
-            }
+        do {
+            let audioData = try Data(contentsOf: audioFilename)
+            body.append(audioData)
+            body.append("\r\n--\(boundary)--\r\n".data(using: .utf8)!)
             
-            // Handle the response from the server if needed
-            print("Audio file uploaded successfully")
+            request.httpBody = body
+            
+            // Send the request to upload the audio file
+            let task = URLSession.shared.dataTask(with: request) { (data, response, error) in
+                if let error = error {
+                    print("Error uploading audio file: \(error)")
+                    return
+                }
+                
+                // Handle the response from the server if needed
+                print("Audio file uploaded successfully")
+            }
+            task.resume()
+        } catch {
+            print("Error reading audio file: \(error)")
         }
-        task.resume()
     }
     
     func playRecording() {
